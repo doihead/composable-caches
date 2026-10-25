@@ -169,7 +169,7 @@ class WithClusterInclusiveCache(
   writeBytes: Int = 8
 ) extends Config((site, here, up) => {
   case ClusterInclusiveCacheKey(`clusterId`) => InclusiveCacheParams(
-      sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(SubsystemBankedCoherenceKey, site).nBanks),
+      sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(ClusterBankedCoherenceKey(`clusterId`), site).nBanks),
       ways = nWays,
       memCycles = outerLatencyCycles,
       writeBytes = writeBytes,
@@ -178,7 +178,7 @@ class WithClusterInclusiveCache(
       bankedControl = bankedControl,
       ctrlAddr = ctrlAddr.map(_ + (1+`clusterId`)*InclusiveCacheParameters.L2ControlSize),
       ctrlXType = ctrlXType)
-  case ClusterBankedCoherenceKey(`clusterId`) => up(SubsystemBankedCoherenceKey, site).copy(coherenceManager = { context =>
+  case ClusterBankedCoherenceKey(`clusterId`) => up(ClusterBankedCoherenceKey(`clusterId`), site).copy(coherenceManager = { context =>
     implicit val p = context.p
     val sbus = context.tlBusWrapperLocationMap(CSBUS(`clusterId`))
     val cbus = context.tlBusWrapperLocationMap.lift(CCBUS(`clusterId`)).getOrElse(sbus)
