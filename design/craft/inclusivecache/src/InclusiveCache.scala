@@ -62,7 +62,7 @@ class InclusiveCache(
         }
 
       val extra = Map(
-        "cache-level"            -> ofInt(2),
+        "cache-level"            -> ofInt(cache.level),
         "cache-unified"          -> Nil,
         "cache-size"             -> ofInt(cache.sizeBytes * node.edges.in.size),
         "cache-sets"             -> ofInt(cache.sets * node.edges.in.size),

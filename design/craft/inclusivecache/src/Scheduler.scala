@@ -52,18 +52,18 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
   io.resp <> sourceX.io.x
 
   val sinkA = Module(new SinkA(params))
+  val sinkB = Module(new SinkB(params))
   val sinkC = Module(new SinkC(params))
   val sinkD = Module(new SinkD(params))
   val sinkE = Module(new SinkE(params))
   val sinkX = Module(new SinkX(params))
 
   sinkA.io.a <> io.in.a
+  sinkB.io.b <> io.out.b
   sinkC.io.c <> io.in.c
   sinkE.io.e <> io.in.e
   sinkD.io.d <> io.out.d
   sinkX.io.x <> io.req
-
-  io.out.b.ready := true.B // disconnected
 
   val directory = Module(new Directory(params))
   val bankedStore = Module(new BankedStore(params))
@@ -161,12 +161,14 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
 
   // Pick highest priority request
   val request = Wire(Decoupled(new FullRequest(params)))
-  request.valid := directory.io.ready && (sinkA.io.req.valid || sinkX.io.req.valid || sinkC.io.req.valid)
+  request.valid := directory.io.ready && (sinkB.io.req.valid || sinkA.io.req.valid || sinkX.io.req.valid || sinkC.io.req.valid)
   request.bits := Mux(sinkC.io.req.valid, sinkC.io.req.bits,
-                  Mux(sinkX.io.req.valid, sinkX.io.req.bits, sinkA.io.req.bits))
+                  Mux(sinkX.io.req.valid, sinkX.io.req.bits,
+                  Mux(sinkA.io.req.valid, sinkA.io.req.bits, sinkB.io.req.bits)))
   sinkC.io.req.ready := directory.io.ready && request.ready
   sinkX.io.req.ready := directory.io.ready && request.ready && !sinkC.io.req.valid
   sinkA.io.req.ready := directory.io.ready && request.ready && !sinkC.io.req.valid && !sinkX.io.req.valid
+  sinkB.io.req.ready := directory.io.ready && request.ready && !sinkC.io.req.valid && !sinkX.io.req.valid && !sinkA.io.req.ready
 
   // If no MSHR has been assigned to this set, we need to allocate one
   val setMatches = Cat(mshrs.map { m => m.io.status.valid && m.io.status.bits.set === request.bits.set }.reverse)

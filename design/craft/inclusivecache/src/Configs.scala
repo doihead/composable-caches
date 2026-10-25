@@ -98,7 +98,7 @@ class WithInclusiveCache(
     }
     val l2 = LazyModule(new InclusiveCache(
       CacheParameters(
-        level = 2,
+        level = 3,
         ways = ways,
         sets = sets,
         blockBytes = sbus.blockBytes,

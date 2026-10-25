@@ -288,7 +288,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.b.bits.tag     := Mux(!s_rprobe, meta.tag, request.tag)
   io.schedule.bits.b.bits.set     := request.set
   io.schedule.bits.b.bits.clients := meta.clients & ~excluded_client
-  io.schedule.bits.c.bits.opcode  := Mux(meta.dirty, ReleaseData, Release)
+  io.schedule.bits.c.bits.opcode  := Mux(meta.dirty, Mux(request.prio(1), ProbeAckData, ReleaseData), Mux(request.prio(1), ProbeAck, Release))
   io.schedule.bits.c.bits.param   := Mux(meta.state === BRANCH, BtoN, TtoN)
   io.schedule.bits.c.bits.source  := 0.U
   io.schedule.bits.c.bits.tag     := meta.tag
@@ -599,6 +599,18 @@ class MSHR(params: InclusiveCacheParameters) extends Module
           w_rprobeackfirst := false.B
           w_rprobeacklast := false.B
         }
+      }
+    }
+    // For B channel requests
+    .elsewhen (new_request.prio(1) && (!params.lastLevel).B) {
+      s_probeack := false.B // Send C response out
+      s_release := false.B // Invalidate metadata
+      // Do we need an inner probe?
+      when ((!params.firstLevel).B && new_meta.hit && (new_meta.clients =/= 0.U)) {
+        s_pprobe := false.B // Sends an inner probe
+        w_pprobeackfirst := false.B // Waits for start of inner probe (to send C out)
+        w_pprobeacklast := false.B // Waits for end of inner probe (to writeback)
+        s_writeback := false.B // Write back data from inner cache
       }
     }
     // For A channel requests
