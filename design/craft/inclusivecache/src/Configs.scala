@@ -231,8 +231,8 @@ class WithClusterInclusiveCache(
     val filter = LazyModule(new TLFilter(cfilter = skipMMIO))
     val l2_inner_buffer = bufInnerExterior()
     val l2_outer_buffer = bufOuterExterior()
-    val cork = LazyModule(new TLCacheCork)
-    val lastLevelNode = cork.node
+    // val cork = LazyModule(new TLCacheCork)
+    val lastLevelNode = TLIdentityNode()
 
     l2_inner_buffer.suggestName("InclusiveCache_inner_TLBuffer")
     l2_outer_buffer.suggestName("InclusiveCache_outer_TLBuffer")

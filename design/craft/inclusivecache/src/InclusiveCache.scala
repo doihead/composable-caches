@@ -79,19 +79,24 @@ class InclusiveCache(
       supportsProbe = xfer)))
     },
     managerFn = { m => TLManagerPortParameters(
-      managers = m.managers.map { m => m.copy(
-        regionType         = if (m.regionType >= RegionType.UNCACHED) RegionType.CACHED else m.regionType,
-        resources          = Resource(device, "caches") +: m.resources,
-        supportsAcquireB   = xfer,
-        supportsAcquireT   = if (m.supportsAcquireT) xfer else TransferSizes.none,
-        supportsArithmetic = if (m.supportsAcquireT) atom else TransferSizes.none,
-        supportsLogical    = if (m.supportsAcquireT) atom else TransferSizes.none,
-        supportsGet        = access,
-        supportsPutFull    = if (m.supportsAcquireT) access else TransferSizes.none,
-        supportsPutPartial = if (m.supportsAcquireT) access else TransferSizes.none,
-        supportsHint       = access,
-        alwaysGrantsT      = false,
-        fifoId             = None)
+      managers = m.managers.map { m => 
+        if (m.regionType == RegionType.UNCACHED) {
+          m.copy(
+            regionType         = if (m.regionType >= RegionType.UNCACHED) RegionType.CACHED else m.regionType,
+            resources          = Resource(device, "caches") +: m.resources,
+            supportsAcquireB   = xfer,
+            supportsAcquireT   = if (m.supportsAcquireT) xfer else TransferSizes.none,
+            supportsArithmetic = if (m.supportsAcquireT) atom else TransferSizes.none,
+            supportsLogical    = if (m.supportsAcquireT) atom else TransferSizes.none,
+            supportsGet        = access,
+            supportsPutFull    = if (m.supportsAcquireT) access else TransferSizes.none,
+            supportsPutPartial = if (m.supportsAcquireT) access else TransferSizes.none,
+            supportsHint       = access,
+            alwaysGrantsT      = false,
+            fifoId             = None)
+        } else {
+          m
+        }
       },
       beatBytes  = cache.beatBytes,
       endSinkId  = InclusiveCacheParameters.all_mshrs(cache, micro),
@@ -125,9 +130,9 @@ class InclusiveCache(
     // Create the L2 Banks
     val mods = (node.in zip node.out) map { case ((in, edgeIn), (out, edgeOut)) =>
       edgeOut.manager.managers.foreach { m =>
-        require (m.supportsAcquireB.contains(xfer),
-          s"All managers behind the L2 must support acquireB($xfer) " +
-          s"but ${m.name} only supports (${m.supportsAcquireB})!")
+        // require (m.supportsAcquireB.contains(xfer),
+        //   s"All managers behind the L2 must support acquireB($xfer) " +
+        //   s"but ${m.name} only supports (${m.supportsAcquireB})!")
         if (m.supportsAcquireT) require (m.supportsAcquireT.contains(xfer),
           s"Any probing managers behind the L2 must support acquireT($xfer) " +
           s"but ${m.name} only supports (${m.supportsAcquireT})!")

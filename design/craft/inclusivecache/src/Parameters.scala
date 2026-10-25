@@ -155,7 +155,7 @@ case class InclusiveCacheParameters(
   val firstLevel = !inner.client.clients.exists(_.supports.probe)
   // If we are the last level cache, we do not need to support outer-B
   val lastLevel = !outer.manager.managers.exists(_.regionType > RegionType.UNCACHED)
-  require (lastLevel)
+  // require (lastLevel)
 
   // Provision enough resources to achieve full throughput with missing single-beat accesses
   val mshrs = InclusiveCacheParameters.all_mshrs(cache, micro)
