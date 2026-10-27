@@ -228,11 +228,38 @@ class WithClusterInclusiveCache(
       if (dcacheMMIO) None else Some(x)
     }
 
-    val filter = LazyModule(new TLFilter(cfilter = skipMMIO))
+    def skipUncacheable(x: TLManagerParameters) = {
+      val cacheable = x.regionType >= RegionType.UNCACHED && x.supportsAcquireB
+      if (!cacheable) None else Some(x)
+    }
+
+    def onlyUncacheable(x: TLManagerParameters) = {
+      val cacheable = x.regionType >= RegionType.UNCACHED && x.supportsAcquireB
+      if (cacheable) None else Some(x)
+    }
+
+    val clientXbar = TLXbar()
+    val managerXbar = TLXbar()
+    println("HEYYYYYYYYYYYO")
+
+    val filter = LazyModule(new TLFilter(cfilter = skipMMIO, mfilter = skipUncacheable))
+    println("HEYYYYYYYYYYY")
+    println(filter)
+    val unfilter = LazyModule(new TLFilter(cfilter = skipMMIO, mfilter = onlyUncacheable))
+    println(unfilter)
+    val underfilter = LazyModule(new TLFilter(mfilter = skipUncacheable))
     val l2_inner_buffer = bufInnerExterior()
     val l2_outer_buffer = bufOuterExterior()
-    val cork = LazyModule(new TLCacheCork)
-    val lastLevelNode = cork.node
+    // val cork = LazyModule(new TLCacheCork)
+    val lastLevelNode = managerXbar
+    println(clientXbar)
+    println(managerXbar)
+
+    managerXbar :*= unfilter.node
+    filter.node :*= clientXbar
+    unfilter.node :*= clientXbar
+    println(clientXbar)
+    println(managerXbar)
 
     l2_inner_buffer.suggestName("InclusiveCache_inner_TLBuffer")
     l2_outer_buffer.suggestName("InclusiveCache_outer_TLBuffer")
@@ -240,10 +267,12 @@ class WithClusterInclusiveCache(
     l2_inner_buffer.node :*= filter.node
     l2.node :*= l2_inner_buffer.node
     l2_outer_buffer.node :*= l2.node
+    println(clientXbar)
+    println(managerXbar)
 
     /* PhysicalFilters need to be on the TL-C side of a CacheCork to prevent Acquire.NtoB -> Grant.toT */
     physicalFilter match {
-      case None => lastLevelNode :*= l2_outer_buffer.node
+      case None => lastLevelNode :*= underfilter.node :*= l2_outer_buffer.node
       case Some(fp) => {
         val physicalFilter = LazyModule(new PhysicalFilter(fp.copy(controlBeatBytes = cbus.beatBytes)))
         lastLevelNode :*= physicalFilter.node :*= l2_outer_buffer.node
@@ -258,8 +287,10 @@ class WithClusterInclusiveCache(
         TLBuffer(1) := TLFragmenter(cbus, Some("LLCCtrl")) := cbus.crossOutHelper(ctrlXType)
       }
     }
+    println(clientXbar)
+    println(managerXbar)
 
     ElaborationArtefacts.add("l2.json", l2.module.json)
-    (filter.node, lastLevelNode, None)
+    (clientXbar, lastLevelNode, None)
   })
 })

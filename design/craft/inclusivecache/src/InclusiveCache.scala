@@ -79,7 +79,9 @@ class InclusiveCache(
       supportsProbe = xfer)))
     },
     managerFn = { m => TLManagerPortParameters(
-      managers = m.managers.map { m => m.copy(
+      managers = m.managers.map { m => 
+        println(m.regionType)
+        m.copy(
         regionType         = if (m.regionType >= RegionType.UNCACHED) RegionType.CACHED else m.regionType,
         resources          = Resource(device, "caches") +: m.resources,
         supportsAcquireB   = xfer,
