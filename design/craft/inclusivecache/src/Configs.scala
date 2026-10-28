@@ -242,7 +242,7 @@ class WithClusterInclusiveCache(
     val managerXbar = TLXbar()
 
     val filter = LazyModule(new TLFilter(cfilter = skipMMIO))
-    val unfilter = LazyModule(new TLFilter(cfilter = skipMMIO, mfilter = onlyUncacheable))
+    val unfilter = LazyModule(new TLFilter(mfilter = onlyUncacheable))
     val underfilter = LazyModule(new TLFilter(mfilter = skipUncacheable))
 
     val l2_inner_buffer = bufInnerExterior()
