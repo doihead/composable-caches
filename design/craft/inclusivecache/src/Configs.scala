@@ -240,26 +240,19 @@ class WithClusterInclusiveCache(
 
     val clientXbar = TLXbar()
     val managerXbar = TLXbar()
-    println("HEYYYYYYYYYYYO")
 
-    val filter = LazyModule(new TLFilter(cfilter = skipMMIO, mfilter = skipUncacheable))
-    println("HEYYYYYYYYYYY")
-    println(filter)
+    val filter = LazyModule(new TLFilter(cfilter = skipMMIO))
     val unfilter = LazyModule(new TLFilter(cfilter = skipMMIO, mfilter = onlyUncacheable))
-    println(unfilter)
     val underfilter = LazyModule(new TLFilter(mfilter = skipUncacheable))
+
     val l2_inner_buffer = bufInnerExterior()
     val l2_outer_buffer = bufOuterExterior()
     // val cork = LazyModule(new TLCacheCork)
     val lastLevelNode = managerXbar
-    println(clientXbar)
-    println(managerXbar)
 
     managerXbar :*= unfilter.node
     filter.node :*= clientXbar
     unfilter.node :*= clientXbar
-    println(clientXbar)
-    println(managerXbar)
 
     l2_inner_buffer.suggestName("InclusiveCache_inner_TLBuffer")
     l2_outer_buffer.suggestName("InclusiveCache_outer_TLBuffer")
@@ -267,8 +260,6 @@ class WithClusterInclusiveCache(
     l2_inner_buffer.node :*= filter.node
     l2.node :*= l2_inner_buffer.node
     l2_outer_buffer.node :*= l2.node
-    println(clientXbar)
-    println(managerXbar)
 
     /* PhysicalFilters need to be on the TL-C side of a CacheCork to prevent Acquire.NtoB -> Grant.toT */
     physicalFilter match {
@@ -287,8 +278,6 @@ class WithClusterInclusiveCache(
         TLBuffer(1) := TLFragmenter(cbus, Some("LLCCtrl")) := cbus.crossOutHelper(ctrlXType)
       }
     }
-    println(clientXbar)
-    println(managerXbar)
 
     ElaborationArtefacts.add("l2.json", l2.module.json)
     (clientXbar, lastLevelNode, None)
