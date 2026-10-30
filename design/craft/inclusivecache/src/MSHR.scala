@@ -299,7 +299,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.c.bits.opcode  := Mux(meta.dirty, Mux(request.prio(1), ProbeAckData, ReleaseData), Mux(request.prio(1), ProbeAck, Release))
   io.schedule.bits.c.bits.param   := Mux(meta.state === BRANCH, BtoN, TtoN)
   io.schedule.bits.c.bits.source  := 0.U
-  io.schedule.bits.c.bits.tag     := meta.tag
+  io.schedule.bits.c.bits.tag     := Mux(request.prio(1) && !meta.hit, request.tag, meta.tag)
   io.schedule.bits.c.bits.set     := request.set
   io.schedule.bits.c.bits.way     := meta.way
   io.schedule.bits.c.bits.dirty   := meta.dirty
