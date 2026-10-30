@@ -44,6 +44,7 @@ class MSHRStatus(params: InclusiveCacheParameters) extends InclusiveCacheBundle(
   val set = UInt(params.setBits.W)
   val tag = UInt(params.tagBits.W)
   val way = UInt(params.wayBits.W)
+  val blockA = Bool()
   val blockB = Bool()
   val nestB  = Bool()
   val blockC = Bool()
@@ -169,6 +170,8 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.status.bits.nestB  := meta_valid && w_releaseack && w_rprobeacklast && w_pprobeacklast && !w_grantfirst
   // The above rules ensure we will block and not nest an outer probe while still doing our
   // own inner probes. Thus every probe wakes exactly one MSHR.
+  io.status.bits.blockA := request.prio(1)
+  // Don't accept A-channel requests while we're getting probed.
   io.status.bits.blockC := !meta_valid
   io.status.bits.nestC  := meta_valid && (!w_rprobeackfirst || !w_pprobeackfirst || !w_grantfirst)
   // The w_grantfirst in nestC is necessary to deal with:
@@ -226,6 +229,11 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     final_meta_writeback.state   := Mux(request.param =/= TtoT && meta.state === TRUNK, TIP, meta.state)
     final_meta_writeback.clients := meta.clients & ~Mux(isToN(request.param), req_clientBit, 0.U)
     final_meta_writeback.hit     := true.B // chained requests are hits
+  } .elsewhen (request.prio(1) && (!params.lastLevel.B)) { // probe
+    final_meta_writeback.dirty   := false.B
+    final_meta_writeback.state   := Mux(isToN(request.param), INVALID, BRANCH)
+    final_meta_writeback.clients := Mux(isToN(request.param), 0.U, meta.clients)
+    final_meta_writeback.hit     := !isToN(request.param)
   } .elsewhen (request.control.flush && params.control.B) { // request.prio(0)
     when (meta.hit) {
       final_meta_writeback.dirty   := false.B
@@ -288,7 +296,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.b.bits.tag     := Mux(!s_rprobe, meta.tag, request.tag)
   io.schedule.bits.b.bits.set     := request.set
   io.schedule.bits.b.bits.clients := meta.clients & ~excluded_client
-  io.schedule.bits.c.bits.opcode  := Mux(meta.dirty, ReleaseData, Release)
+  io.schedule.bits.c.bits.opcode  := Mux(meta.dirty, Mux(request.prio(1), ProbeAckData, ReleaseData), Mux(request.prio(1), ProbeAck, Release))
   io.schedule.bits.c.bits.param   := Mux(meta.state === BRANCH, BtoN, TtoN)
   io.schedule.bits.c.bits.source  := 0.U
   io.schedule.bits.c.bits.tag     := meta.tag
@@ -599,6 +607,23 @@ class MSHR(params: InclusiveCacheParameters) extends Module
           w_rprobeackfirst := false.B
           w_rprobeacklast := false.B
         }
+      }
+    }
+    // For B channel requests
+    .elsewhen (new_request.prio(1)) {
+      // s_probeack := false.B // Send C response out
+      // s_release := false.B // Invalidate metadata
+      // Do we need an inner probe?
+      when ((!params.firstLevel).B && new_meta.hit && (new_meta.clients =/= 0.U)) {
+        s_pprobe := false.B // Sends an inner probe
+        w_pprobeackfirst := false.B // Waits for start of inner probe (to send C out)
+        w_pprobeacklast := false.B // Waits for end of inner probe (to writeback)
+        s_probeack := false.B
+        s_writeback := false.B
+      }
+      .otherwise {
+        s_probeack := false.B
+        s_writeback := false.B
       }
     }
     // For A channel requests

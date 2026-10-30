@@ -52,6 +52,7 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
   io.resp <> sourceX.io.x
 
   val sinkA = Module(new SinkA(params))
+  val sinkB = Module(new SinkB(params))
   val sinkC = Module(new SinkC(params))
   val sinkD = Module(new SinkD(params))
   val sinkE = Module(new SinkE(params))
@@ -60,10 +61,10 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
   sinkA.io.a <> io.in.a
   sinkC.io.c <> io.in.c
   sinkE.io.e <> io.in.e
+  sinkB.io.b <> io.out.b
   sinkD.io.d <> io.out.d
   sinkX.io.x <> io.req
-
-  io.out.b.ready := true.B // disconnected
+  dontTouch(sinkB.io)
 
   val directory = Module(new Directory(params))
   val bankedStore = Module(new BankedStore(params))
@@ -161,17 +162,20 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
 
   // Pick highest priority request
   val request = Wire(Decoupled(new FullRequest(params)))
-  request.valid := directory.io.ready && (sinkA.io.req.valid || sinkX.io.req.valid || sinkC.io.req.valid)
+  request.valid := directory.io.ready && (sinkB.io.req.valid || sinkA.io.req.valid || sinkX.io.req.valid || sinkC.io.req.valid)
   request.bits := Mux(sinkC.io.req.valid, sinkC.io.req.bits,
-                  Mux(sinkX.io.req.valid, sinkX.io.req.bits, sinkA.io.req.bits))
+                  Mux(sinkX.io.req.valid, sinkX.io.req.bits,
+                  Mux(sinkA.io.req.valid, sinkA.io.req.bits, sinkB.io.req.bits)))
   sinkC.io.req.ready := directory.io.ready && request.ready
   sinkX.io.req.ready := directory.io.ready && request.ready && !sinkC.io.req.valid
   sinkA.io.req.ready := directory.io.ready && request.ready && !sinkC.io.req.valid && !sinkX.io.req.valid
+  sinkB.io.req.ready := directory.io.ready && request.ready && !sinkC.io.req.valid && !sinkX.io.req.valid && !sinkA.io.req.valid
 
   // If no MSHR has been assigned to this set, we need to allocate one
   val setMatches = Cat(mshrs.map { m => m.io.status.valid && m.io.status.bits.set === request.bits.set }.reverse)
   val alloc = !setMatches.orR // NOTE: no matches also means no BC or C pre-emption on this set
   // If a same-set MSHR says that requests of this type must be blocked (for bounded time), do it
+  val blockA = Mux1H(setMatches, mshrs.map(_.io.status.bits.blockA)) && request.bits.prio(0)
   val blockB = Mux1H(setMatches, mshrs.map(_.io.status.bits.blockB)) && request.bits.prio(1)
   val blockC = Mux1H(setMatches, mshrs.map(_.io.status.bits.blockC)) && request.bits.prio(2)
   // If a same-set MSHR says that requests of this type must be handled out-of-band, use special BC|C MSHR
@@ -182,13 +186,14 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
   val prioFilter = Cat(request.bits.prio(2), !request.bits.prio(0), ~0.U((params.mshrs-2).W))
   val lowerMatches = setMatches & prioFilter
   // If we match an MSHR <= our priority that neither blocks nor nests us, queue to it.
-  val queue = lowerMatches.orR && !nestB && !nestC && !blockB && !blockC
+  val queue = lowerMatches.orR && !nestB && !nestC && !blockA && !blockB && !blockC
 
   if (!params.lastLevel) {
     params.ccover(request.valid && blockB, "SCHEDULER_BLOCKB", "Interlock B request while resolving set conflict")
     params.ccover(request.valid && nestB,  "SCHEDULER_NESTB", "Priority escalation from channel B")
   }
   if (!params.firstLevel) {
+    params.ccover(request.valid && blockA, "SCHEDULER_BLOCKA", "Interlock A request while resolving set conflict")
     params.ccover(request.valid && blockC, "SCHEDULER_BLOCKC", "Interlock C request while resolving set conflict")
     params.ccover(request.valid && nestC,  "SCHEDULER_NESTC", "Priority escalation from channel C")
   }
