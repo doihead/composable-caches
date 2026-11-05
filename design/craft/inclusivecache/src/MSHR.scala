@@ -231,9 +231,9 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     final_meta_writeback.hit     := true.B // chained requests are hits
   } .elsewhen (request.prio(1) && (!params.lastLevel.B)) { // probe
     final_meta_writeback.dirty   := false.B
-    final_meta_writeback.state   := Mux(isToN(request.param), INVALID, BRANCH)
-    final_meta_writeback.clients := Mux(isToN(request.param), 0.U, meta.clients)
-    final_meta_writeback.hit     := !isToN(request.param)
+    final_meta_writeback.state   := Mux(request.param === toN, INVALID, BRANCH)
+    final_meta_writeback.clients := Mux(request.param === toN, 0.U, meta.clients)
+    final_meta_writeback.hit     := request.param =/= toN
   } .elsewhen (request.control.flush && params.control.B) { // request.prio(0)
     when (meta.hit) {
       final_meta_writeback.dirty   := false.B
@@ -284,6 +284,21 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   // Therefore, we must consult our own meta-data state to confirm he owns the line still.
   val honour_BtoT = meta.hit && (meta.clients & req_clientBit).orR
 
+  val shrink_param = MuxLookup(Cat(request.param, meta.state), 0.U)(Seq(
+    Cat(toT, TIP)     -> TtoT,
+    Cat(toT, TRUNK)   -> TtoT,
+    Cat(toT, BRANCH)  -> BtoB,
+    Cat(toT, INVALID) -> NtoN,
+    Cat(toB, TIP)     -> TtoB,
+    Cat(toB, TRUNK)   -> TtoB,
+    Cat(toB, BRANCH)  -> BtoB,
+    Cat(toB, INVALID) -> NtoN,
+    Cat(toN, TIP)     -> TtoN,
+    Cat(toN, TRUNK)   -> TtoN,
+    Cat(toN, BRANCH)  -> BtoN,
+    Cat(toN, INVALID) -> NtoN
+  ))
+
   // The client asking us to act is proof they don't have permissions.
   val excluded_client = Mux(meta.hit && request.prio(0) && skipProbeN(request.opcode, params.cache.hintsSkipProbe), req_clientBit, 0.U)
   io.schedule.bits.a.bits.tag     := request.tag
@@ -297,7 +312,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.b.bits.set     := request.set
   io.schedule.bits.b.bits.clients := meta.clients & ~excluded_client
   io.schedule.bits.c.bits.opcode  := Mux(meta.dirty, Mux(request.prio(1), ProbeAckData, ReleaseData), Mux(request.prio(1), ProbeAck, Release))
-  io.schedule.bits.c.bits.param   := Mux(meta.state === BRANCH, BtoN, TtoN)
+  io.schedule.bits.c.bits.param   := Mux(request.prio(1), shrink_param, Mux(meta.state === BRANCH, BtoN, TtoN))
   io.schedule.bits.c.bits.source  := 0.U
   io.schedule.bits.c.bits.tag     := Mux(request.prio(1) && !meta.hit, request.tag, meta.tag)
   io.schedule.bits.c.bits.set     := request.set
