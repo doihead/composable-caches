@@ -230,10 +230,12 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     final_meta_writeback.clients := meta.clients & ~Mux(isToN(request.param), req_clientBit, 0.U)
     final_meta_writeback.hit     := true.B // chained requests are hits
   } .elsewhen (request.prio(1) && (!params.lastLevel.B)) { // probe
-    final_meta_writeback.dirty   := false.B
-    final_meta_writeback.state   := Mux(request.param === toN, INVALID, BRANCH)
-    final_meta_writeback.clients := Mux(request.param === toN, 0.U, meta.clients)
-    final_meta_writeback.hit     := request.param =/= toN
+    when (meta.hit) {
+      final_meta_writeback.dirty   := false.B
+      final_meta_writeback.state   := Mux(request.param === toN, INVALID, BRANCH)
+      final_meta_writeback.clients := meta.clients & ~probes_toN
+      final_meta_writeback.hit     := request.param =/= toN
+    }
   } .elsewhen (request.control.flush && params.control.B) { // request.prio(0)
     when (meta.hit) {
       final_meta_writeback.dirty   := false.B
