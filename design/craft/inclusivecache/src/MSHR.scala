@@ -628,20 +628,17 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     }
     // For B channel requests
     .elsewhen (new_request.prio(1)) {
-      // s_probeack := false.B // Send C response out
-      // s_release := false.B // Invalidate metadata
-      // Do we need an inner probe?
-      when ((!params.firstLevel).B && new_meta.hit && (new_meta.clients =/= 0.U)) {
-        s_pprobe := false.B // Sends an inner probe
-        w_pprobeackfirst := false.B // Waits for start of inner probe (to send C out)
-        w_pprobeacklast := false.B // Waits for end of inner probe (to writeback)
-        s_probeack := false.B
+      // Is this probe valid?
+      when ((!params.firstLevel).B && new_meta.hit) {
+        // Do we need an inner probe?
+        when (new_meta.clients =/= 0.U) {
+          s_pprobe := false.B
+          w_pprobeackfirst := false.B
+          w_pprobeacklast := false.B
+        }
         s_writeback := false.B
       }
-      .otherwise {
-        s_probeack := false.B
-        s_writeback := false.B
-      }
+      s_probeack := false.B
     }
     // For A channel requests
     .otherwise { // new_request.prio(0) && !new_request.control
