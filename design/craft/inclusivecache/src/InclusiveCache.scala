@@ -62,7 +62,7 @@ class InclusiveCache(
         }
 
       val extra = Map(
-        "cache-level"            -> ofInt(2),
+        "cache-level"            -> ofInt(cache.level),
         "cache-unified"          -> Nil,
         "cache-size"             -> ofInt(cache.sizeBytes * node.edges.in.size),
         "cache-sets"             -> ofInt(cache.sets * node.edges.in.size),
@@ -128,10 +128,10 @@ class InclusiveCache(
     val mods = (node.in zip node.out) map { case ((in, edgeIn), (out, edgeOut)) =>
       edgeOut.manager.managers.foreach { m =>
         require (m.supportsAcquireB.contains(xfer),
-          s"All managers behind the L2 must support acquireB($xfer) " +
+          s"All managers behind the L${cache.level} must support acquireB($xfer) " +
           s"but ${m.name} only supports (${m.supportsAcquireB})!")
         if (m.supportsAcquireT) require (m.supportsAcquireT.contains(xfer),
-          s"Any probing managers behind the L2 must support acquireT($xfer) " +
+          s"Any probing managers behind the L${cache.level} must support acquireT($xfer) " +
           s"but ${m.name} only supports (${m.supportsAcquireT})!")
       }
 

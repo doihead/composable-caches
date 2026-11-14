@@ -58,7 +58,8 @@ class WithInclusiveCache(
   bankedControl: Boolean = false,
   ctrlAddr: Option[BigInt] = Some(InclusiveCacheParameters.L2ControlAddress),
   ctrlXType: ClockCrossingType = NoCrossing,
-  writeBytes: Int = 8
+  writeBytes: Int = 8,
+  level: Int = 2
 ) extends Config((site, here, up) => {
   case InclusiveCacheKey => InclusiveCacheParams(
       sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(SubsystemBankedCoherenceKey, site).nBanks),
@@ -98,7 +99,7 @@ class WithInclusiveCache(
     }
     val l2 = LazyModule(new InclusiveCache(
       CacheParameters(
-        level = 2,
+        level = level,
         ways = ways,
         sets = sets,
         blockBytes = sbus.blockBytes,
@@ -166,7 +167,8 @@ class WithClusterInclusiveCache(
   bankedControl: Boolean = false,
   ctrlAddr: Option[BigInt] = Some(InclusiveCacheParameters.L2ControlAddress),
   ctrlXType: ClockCrossingType = NoCrossing,
-  writeBytes: Int = 8
+  writeBytes: Int = 8,
+  level: Int = 2
 ) extends Config((site, here, up) => {
   case ClusterInclusiveCacheKey(`clusterId`) => InclusiveCacheParams(
       sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(ClusterBankedCoherenceKey(`clusterId`), site).nBanks),
@@ -206,7 +208,7 @@ class WithClusterInclusiveCache(
     }
     val l2 = LazyModule(new InclusiveCache(
       CacheParameters(
-        level = 2,
+        level = level,
         ways = ways,
         sets = sets,
         blockBytes = sbus.blockBytes,
