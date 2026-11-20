@@ -33,17 +33,23 @@ case class CacheParameters(
   sets:        Int,
   blockBytes:  Int,
   beatBytes:   Int, // inner
-  hintsSkipProbe: Boolean)
+  hintsSkipProbe: Boolean,
+  initialWaysEnabled: Int,
+  spadAddr:    Option[BigInt])
 {
   require (ways > 0)
   require (sets > 0)
   require (blockBytes > 0 && isPow2(blockBytes))
   require (beatBytes > 0 && isPow2(beatBytes))
   require (blockBytes >= beatBytes)
+  require (initialWaysEnabled > 0 && initialWaysEnabled <= ways)
+  require (hasSpad == spadAddr.isDefined)
 
   val blocks = ways * sets
   val sizeBytes = blocks * blockBytes
   val blockBeats = blockBytes/beatBytes
+  def hasSpad = initialWaysEnabled != ways
+  def spadAddressSet = Option.when(hasSpad)(AddressSet(spadAddr.get, (BigInt(1) << (BigInt(sizeBytes - 1).bitLength)) - 1))
 }
 
 case class InclusiveCachePortParameters(
@@ -165,7 +171,7 @@ case class InclusiveCacheParameters(
   val relLists = 2
   val relBeats = relLists*cache.blockBeats
 
-  val flatAddresses = AddressSet.unify(outer.manager.managers.flatMap(_.address))
+  val flatAddresses = AddressSet.unify(outer.manager.managers.flatMap(_.address) ++ cache.spadAddressSet)
   val pickMask = AddressDecoder(flatAddresses.map(Seq(_)), flatAddresses.map(_.mask).reduce(_|_))
 
   def bitOffsets(x: BigInt, offset: Int = 0, tail: List[Int] = List.empty[Int]): List[Int] =
@@ -210,11 +216,11 @@ case class InclusiveCacheParameters(
     }
   }
 
-  def parseAddress(x: UInt): (UInt, UInt, UInt) = {
+  def parseAddress(x: UInt): (UInt, UInt, UInt, UInt) = {
     val offset = Cat(addressMapping.map(o => x(o,o)).reverse)
     val set = offset >> offsetBits
     val tag = set >> setBits
-    (tag(tagBits-1, 0), set(setBits-1, 0), offset(offsetBits-1, 0))
+    (tag(tagBits-1, 0), set(setBits-1, 0), offset(offsetBits-1, 0), tag(wayBits-1, 0))
   }
 
   def widen(x: UInt, width: Int): UInt = {

@@ -79,9 +79,7 @@ class InclusiveCache(
       supportsProbe = xfer)))
     },
     managerFn = { m => TLManagerPortParameters(
-      managers = m.managers.map { m => 
-        println(m.regionType)
-        m.copy(
+      managers = m.managers.map { m => m.copy(
         regionType         = if (m.regionType >= RegionType.UNCACHED) RegionType.CACHED else m.regionType,
         resources          = Resource(device, "caches") +: m.resources,
         supportsAcquireB   = xfer,
@@ -94,6 +92,19 @@ class InclusiveCache(
         supportsHint       = access,
         alwaysGrantsT      = false,
         fifoId             = None)
+      } ++ cache.spadAddressSet.map { spadAddressSet => TLSlaveParameters.v1(
+        address            = Seq(spadAddressSet),
+        resources          = Seq(Resource(device, "caches")),
+        regionType         = RegionType.UNCACHED,
+        executable         = false,
+        supportsAcquireT   = access,
+        supportsAcquireB   = access,
+        supportsArithmetic = access,
+        supportsLogical    = access,
+        supportsGet        = access,
+        supportsPutFull    = access,
+        supportsPutPartial = access,
+        supportsHint       = access)
       },
       beatBytes  = cache.beatBytes,
       endSinkId  = InclusiveCacheParameters.all_mshrs(cache, micro),
@@ -148,6 +159,8 @@ class InclusiveCache(
       scheduler.io.req.bits.address := 0.U
       scheduler.io.req.bits.invalidate := false.B
       scheduler.io.resp.ready := true.B
+      scheduler.io.enable_ways_req.valid := false.B
+      scheduler.io.enable_ways_req.bits := 0.U
 
 
       // Fix-up the missing addresses. We do this here so that the Scheduler can be
@@ -179,6 +192,8 @@ class InclusiveCache(
 
         when (sched.io.resp.valid) { ctrl.module.io.flush_resp := true.B }
         sched.io.resp.ready := true.B
+
+        sched.io.enable_ways_req := ctrl.module.io.enable_ways_req
       }}
     }
 

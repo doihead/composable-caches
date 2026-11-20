@@ -18,7 +18,7 @@ class SinkB(params: InclusiveCacheParameters) extends Module
   b.ready := io.req.ready
   io.req.valid := b.valid
 
-  val (tag, set, offset) = params.parseAddress(b.bits.address)
+  val (tag, set, offset, spad_way) = params.parseAddress(b.bits.address)
 
   io.req.bits.prio               := VecInit(2.U(3.W).asBools)
   io.req.bits.control.flush      := false.B
@@ -31,4 +31,6 @@ class SinkB(params: InclusiveCacheParameters) extends Module
   io.req.bits.set                := set
   io.req.bits.tag                := tag
   io.req.bits.put                := 0.U
+  io.req.bits.is_spad            := (if (params.cache.hasSpad) params.cache.spadAddressSet.get.contains(b.bits.address) else false.B)
+  io.req.bits.spad_way           := spad_way
 }

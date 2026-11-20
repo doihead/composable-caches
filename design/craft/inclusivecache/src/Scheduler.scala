@@ -35,6 +35,7 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
     // Control port
     val req = Flipped(Decoupled(new SinkXRequest(params)))
     val resp = Decoupled(new SourceXRequest(params))
+    val enable_ways_req = Flipped(Valid(UInt(log2Ceil(params.cache.ways + 1).W)))
   })
 
   val sourceA = Module(new SourceA(params))
@@ -64,7 +65,6 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
   sinkB.io.b <> io.out.b
   sinkD.io.d <> io.out.d
   sinkX.io.x <> io.req
-  dontTouch(sinkB.io)
 
   val directory = Module(new Directory(params))
   val bankedStore = Module(new BankedStore(params))
@@ -149,6 +149,8 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
 
   directory.io.write.valid := schedule.dir.valid
   directory.io.write.bits.viewAsSupertype(chiselTypeOf(schedule.dir.bits)) := schedule.dir.bits
+
+  directory.io.enable_ways_req := io.enable_ways_req
 
   // Forward meta-data changes from nested transaction completion
   val select_c  = mshr_selectOH(params.mshrs-1)
@@ -270,6 +272,8 @@ class InclusiveCacheBankScheduler(params: InclusiveCacheParameters) extends Modu
   directory.io.read.valid := mshr_uses_directory || alloc_uses_directory
   directory.io.read.bits.set := Mux(mshr_uses_directory_for_lb, scheduleSet,          request.bits.set)
   directory.io.read.bits.tag := Mux(mshr_uses_directory_for_lb, requests.io.data.tag, request.bits.tag)
+  directory.io.read.bits.is_spad := Mux(mshr_uses_directory_for_lb, requests.io.data.is_spad, request.bits.is_spad)
+  directory.io.read.bits.spad_way := Mux(mshr_uses_directory_for_lb, requests.io.data.spad_way, request.bits.spad_way)
 
   // Enqueue the request if not bypassed directly into an MSHR
   requests.io.push.valid := request.valid && queue && !bypassQueue

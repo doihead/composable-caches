@@ -72,7 +72,7 @@ class SinkC(params: InclusiveCacheParameters) extends Module
     // No restrictions on the type of buffer
     val c = params.micro.innerBuf.c(io.c)
 
-    val (tag, set, offset) = params.parseAddress(c.bits.address)
+    val (tag, set, offset, spad_way) = params.parseAddress(c.bits.address)
     val (first, last, _, beat) = params.inner.count(c)
     val hasData = params.inner.hasData(c.bits)
     val raw_resp = c.bits.opcode === TLMessages.ProbeAck || c.bits.opcode === TLMessages.ProbeAckData
@@ -150,6 +150,8 @@ class SinkC(params: InclusiveCacheParameters) extends Module
     io.req.bits.set                := set
     io.req.bits.tag                := tag
     io.req.bits.put                := put
+    io.req.bits.is_spad            := (if (params.cache.hasSpad) params.cache.spadAddressSet.get.contains(c.bits.address) else false.B)
+    io.req.bits.spad_way           := spad_way
 
     putbuffer.io.push.bits.index := put
     putbuffer.io.push.bits.data.data    := c.bits.data

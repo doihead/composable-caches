@@ -58,8 +58,10 @@ class WithInclusiveCache(
   bankedControl: Boolean = false,
   ctrlAddr: Option[BigInt] = Some(InclusiveCacheParameters.L2ControlAddress),
   ctrlXType: ClockCrossingType = NoCrossing,
+  spadAddr: Option[BigInt] = None,
   writeBytes: Int = 8,
-  level: Int = 2
+  level: Int = 2,
+  initialWaysEnabled: Int = -1,
 ) extends Config((site, here, up) => {
   case InclusiveCacheKey => InclusiveCacheParams(
       sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(SubsystemBankedCoherenceKey, site).nBanks),
@@ -104,7 +106,9 @@ class WithInclusiveCache(
         sets = sets,
         blockBytes = sbus.blockBytes,
         beatBytes = sbus.beatBytes,
-        hintsSkipProbe = hintsSkipProbe),
+        hintsSkipProbe = hintsSkipProbe,
+        initialWaysEnabled = if (initialWaysEnabled == -1) ways else initialWaysEnabled,
+        spadAddr = spadAddr),
       InclusiveCacheMicroParameters(
         writeBytes = writeBytes,
         portFactor = portFactor,
@@ -167,8 +171,10 @@ class WithClusterInclusiveCache(
   bankedControl: Boolean = false,
   ctrlAddr: Option[BigInt] = Some(InclusiveCacheParameters.L2ControlAddress),
   ctrlXType: ClockCrossingType = NoCrossing,
+  spadAddr: Option[BigInt] = None,
   writeBytes: Int = 8,
-  level: Int = 2
+  level: Int = 2,
+  initialWaysEnabled: Int = -1,
 ) extends Config((site, here, up) => {
   case ClusterInclusiveCacheKey(`clusterId`) => InclusiveCacheParams(
       sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(ClusterBankedCoherenceKey(`clusterId`), site).nBanks),
@@ -213,7 +219,9 @@ class WithClusterInclusiveCache(
         sets = sets,
         blockBytes = sbus.blockBytes,
         beatBytes = sbus.beatBytes,
-        hintsSkipProbe = hintsSkipProbe),
+        hintsSkipProbe = hintsSkipProbe,
+        initialWaysEnabled = if (initialWaysEnabled == -1) ways else initialWaysEnabled,
+        spadAddr = spadAddr),
       InclusiveCacheMicroParameters(
         writeBytes = writeBytes,
         portFactor = portFactor,

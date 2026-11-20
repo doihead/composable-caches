@@ -34,7 +34,7 @@ class SinkX(params: InclusiveCacheParameters) extends Module
   })
 
   val x = Queue(io.x, 1)
-  val (tag, set, offset) = params.parseAddress(x.bits.address)
+  val (tag, set, offset, spad_way) = params.parseAddress(x.bits.address)
 
   x.ready := io.req.ready
   io.req.valid := x.valid
@@ -53,4 +53,6 @@ class SinkX(params: InclusiveCacheParameters) extends Module
   io.req.bits.set                := set
   io.req.bits.tag                := tag
   io.req.bits.put                := 0.U
+  io.req.bits.is_spad            := (if (params.cache.hasSpad) params.cache.spadAddressSet.get.contains(x.bits.address) else false.B)
+  io.req.bits.spad_way           := spad_way
 }

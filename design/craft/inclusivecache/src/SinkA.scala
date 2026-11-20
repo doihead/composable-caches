@@ -80,7 +80,7 @@ class SinkA(params: InclusiveCacheParameters) extends Module
   putbuffer.io.push.valid := a.valid && hasData && !req_block && !set_block
   when (a.valid && first && hasData && !req_block && !buf_block) { lists_set := freeOH }
 
-  val (tag, set, offset) = params.parseAddress(a.bits.address)
+  val (tag, set, offset, spad_way) = params.parseAddress(a.bits.address)
   val put = Mux(first, freeIdx, RegEnable(freeIdx, first))
 
   io.req.bits.prio               := VecInit(1.U(3.W).asBools)
@@ -94,6 +94,8 @@ class SinkA(params: InclusiveCacheParameters) extends Module
   io.req.bits.set                := set
   io.req.bits.tag                := tag
   io.req.bits.put                := put
+  io.req.bits.is_spad            := (if (params.cache.hasSpad) params.cache.spadAddressSet.get.contains(a.bits.address) else false.B)
+  io.req.bits.spad_way           := spad_way
 
   putbuffer.io.push.bits.index := put
   putbuffer.io.push.bits.data.data    := a.bits.data

@@ -281,6 +281,9 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   invalid.state   := INVALID
   invalid.clients := 0.U
   invalid.tag     := 0.U
+  if (params.cache.hasSpad) {
+    invalid.spad_trunk.get := false.B
+  }
 
   // Just because a client says BtoT, by the time we process the request he may be N.
   // Therefore, we must consult our own meta-data state to confirm he owns the line still.
@@ -330,11 +333,12 @@ class MSHR(params: InclusiveCacheParameters) extends Module
                                          NtoT -> NtoT)))
   io.schedule.bits.d.bits.sink    := 0.U
   io.schedule.bits.d.bits.way     := meta.way
-  io.schedule.bits.d.bits.bad     := bad_grant
+  io.schedule.bits.d.bits.bad     := bad_grant || (meta.is_spad && !meta.hit)
   io.schedule.bits.e.bits.sink    := sink
   io.schedule.bits.x.bits.fail    := false.B
   io.schedule.bits.dir.bits.set   := request.set
   io.schedule.bits.dir.bits.way   := meta.way
+  io.schedule.bits.dir.bits.is_spad := meta.is_spad
   io.schedule.bits.dir.bits.data  := Mux(!s_release, invalid, WireInit(new DirectoryEntry(params), init = final_meta_writeback))
 
   // Coverage of state transitions
@@ -597,34 +601,38 @@ class MSHR(params: InclusiveCacheParameters) extends Module
 
     // For C channel requests (ie: Release[Data])
     when (new_request.prio(2) && (!params.firstLevel).B) {
-      s_execute := false.B
-      // Do we need to go dirty?
-      when (new_request.opcode(0) && !new_meta.dirty) {
-        s_writeback := false.B
+      when (new_meta.hit || !new_meta.is_spad) {
+        s_execute := false.B
+        // Do we need to go dirty?
+        when (new_request.opcode(0) && !new_meta.dirty) {
+          s_writeback := false.B
+        }
+        // Does our state change?
+        when (isToB(new_request.param) && new_meta.state === TRUNK) {
+          s_writeback := false.B
+        }
+        // Do our clients change?
+        when (isToN(new_request.param) && (new_meta.clients & new_clientBit) =/= 0.U) {
+          s_writeback := false.B
+        }
       }
-      // Does our state change?
-      when (isToB(new_request.param) && new_meta.state === TRUNK) {
-        s_writeback := false.B
-      }
-      // Do our clients change?
-      when (isToN(new_request.param) && (new_meta.clients & new_clientBit) =/= 0.U) {
-        s_writeback := false.B
-      }
-      assert (new_meta.hit)
+      assert (new_meta.hit || new_meta.is_spad)
     }
     // For X channel requests (ie: flush or invalidate)
     .elsewhen (new_request.control.flush && params.control.B) { // new_request.prio(0)
-      s_flush := false.B
-      // Do we need to actually do something?
-      when (new_meta.hit) {
-        s_release := false.B
-        // If flush request is an invalidate, don't writeback cache block. Just clear directory
-        w_releaseack := Mux(new_request.control.invalidate, true.B, false.B)
-        // Do we need to shoot-down inner caches?
-        when ((!params.firstLevel).B && (new_meta.clients =/= 0.U)) {
-          s_rprobe := false.B
-          w_rprobeackfirst := false.B
-          w_rprobeacklast := false.B
+      when (!new_meta.is_spad) {
+        s_flush := false.B
+        // Do we need to actually do something?
+        when (new_meta.hit) {
+          s_release := false.B
+          // If flush request is an invalidate, don't writeback cache block. Just clear directory
+          w_releaseack := Mux(new_request.control.invalidate, true.B, false.B)
+          // Do we need to shoot-down inner caches?
+          when ((!params.firstLevel).B && (new_meta.clients =/= 0.U)) {
+            s_rprobe := false.B
+            w_rprobeackfirst := false.B
+            w_rprobeacklast := false.B
+          }
         }
       }
     }
@@ -641,12 +649,13 @@ class MSHR(params: InclusiveCacheParameters) extends Module
         s_writeback := false.B
       }
       s_probeack := false.B
+      assert(!new_meta.is_spad)
     }
     // For A channel requests
     .otherwise { // new_request.prio(0) && !new_request.control
       s_execute := false.B
       // Do we need an eviction?
-      when (!new_meta.hit && new_meta.state =/= INVALID) {
+      when (!new_meta.hit && !new_meta.is_spad && new_meta.state =/= INVALID) {
         s_release := false.B
         w_releaseack := false.B
         // Do we need to shoot-down inner caches?
@@ -657,7 +666,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
         }
       }
       // Do we need an acquire?
-      when (!new_meta.hit || (new_meta.state === BRANCH && new_needT)) {
+      when ((!new_meta.hit || (new_meta.state === BRANCH && new_needT)) && !new_meta.is_spad) {
         s_acquire := false.B
         w_grantfirst := false.B
         w_grantlast := false.B
@@ -681,8 +690,12 @@ class MSHR(params: InclusiveCacheParameters) extends Module
         s_writeback := false.B
       }
       // Becomes dirty?
-      when (!new_request.opcode(2) && new_meta.hit && !new_meta.dirty) {
+      when (!new_request.opcode(2) && (new_meta.hit || new_meta.is_spad) && !new_meta.dirty) {
         s_writeback := false.B
+      }
+      // Don't writeback due to bad scratchpad access?
+      when (!new_meta.hit && new_meta.is_spad) {
+        s_writeback := true.B
       }
     }
   }

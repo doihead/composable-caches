@@ -41,6 +41,7 @@ class InclusiveCacheControl(outer: InclusiveCache, control: InclusiveCacheContro
       val flush_req = Decoupled(UInt(64.W))
       val invalidate_req = Output(Bool()) // Don't release block to main memory, just clear from directory
       val flush_resp = Input(Bool())
+      val enable_ways_req = Valid(UInt(log2Ceil(outer.cache.ways + 1).W))
     })
     // Flush directive
     val flushInValid   = RegInit(false.B)
@@ -59,6 +60,16 @@ class InclusiveCacheControl(outer: InclusiveCache, control: InclusiveCacheContro
     when (!io.flush_match && flushInValid) {
       flushInValid := false.B
       flushOutValid := true.B
+    }
+
+    val enableWaysValid = RegInit(false.B)
+    val enableWaysReg   = RegInit(outer.cache.initialWaysEnabled.U(log2Ceil(outer.cache.ways + 1).W))
+
+    io.enable_ways_req.valid := enableWaysValid
+    io.enable_ways_req.bits := enableWaysReg
+
+    when (enableWaysValid) {
+      enableWaysValid := false.B
     }
 
     val flush32 = RegField.w(32, RegWriteFn((ivalid, oready, data) => {
@@ -101,6 +112,17 @@ class InclusiveCacheControl(outer: InclusiveCache, control: InclusiveCacheContro
       (!flushInValid, flushOutValid)
     }), RegFieldDesc("Invalidate64", "Invalidate the phsyical address equal to the 64-bit written data from the cache"))
 
+    val enableWays = RegField(64, r = enableWaysReg, w = RegWriteFn((ivalid, oready, data) => {
+      when (ivalid) {
+        val new_enable_ways = data(log2Ceil(outer.cache.ways + 1) - 1, 0)
+        when (new_enable_ways > enableWaysReg && new_enable_ways <= outer.cache.ways.U) {
+          enableWaysReg := new_enable_ways
+          enableWaysValid := true.B
+        }
+      }
+      (true.B, true.B)
+    }), RegFieldDesc("EnableWays", "Set the number of enabled cache ways to the 64-bit written data. Can only be increased"))
+
     // Information about the cache configuration
     val banksR  = RegField.r(8, outer.node.edges.in.size.U,         RegFieldDesc("Banks",
       "Number of banks in the cache", reset=Some(outer.node.edges.in.size)))
@@ -113,6 +135,7 @@ class InclusiveCacheControl(outer: InclusiveCache, control: InclusiveCacheContro
 
     val regmap = ctrlnode.regmap(
       0x000 -> RegFieldGroup("Config", Some("Information about the Cache Configuration"), Seq(banksR, waysR, lgSetsR, lgBlockBytesR)),
+      0x008 -> Seq(enableWays),
       0x200 -> (if (control.beatBytes >= 8) Seq(flush64) else Nil),
       0x240 -> Seq(flush32),
       0x280 -> (if (control.beatBytes >= 8) Seq(invalidate64) else Nil),
